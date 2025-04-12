@@ -1,4 +1,5 @@
 add the port scanning functionality
+add web interface
 add the database to compare found ips/hostnames to known ones
 add some way for the user to declare known ips/hostnames
 think of the reliable way to tell if a device has left the home
