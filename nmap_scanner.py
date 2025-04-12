@@ -7,6 +7,7 @@ import time
 from typing import List, Dict, Any, Set
 
 import nmap
+from database import ScanDatabase
 
 
 def parse_args() -> argparse.Namespace:
@@ -31,6 +32,11 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument('--progress-timeout', dest='progress_timeout', type=int, default=60,
                         help='Time in seconds before showing in-progress scans (default: 30)')
+
+    parser.add_argument('--web', action='store_true', help='Run the web interface')
+    parser.add_argument('--web-host', default='0.0.0.0', help='Web interface host')
+    parser.add_argument('--web-port', type=int, default=5000, help='Web interface port')
+
     return parser.parse_args()
 
 
@@ -49,8 +55,6 @@ def discover_hosts(ip_range: str, ping_method: str = 'full') -> List[Dict[str, s
         'arp': '-PR',
         'icmp': '-PE -PP -PM'
     }
-
-    # ip_range at this point is literally the string taken from the --ip-range argument
 
     print(f"[*] Discovering hosts in {ip_range}...")
     nm.scan(hosts=ip_range, arguments=f"-sn -T5 {ping_flags[ping_method]}")
@@ -187,7 +191,6 @@ def monitor_progress(active_scans: Set[str], timeout: int, stop_event: threading
     :param stop_event: Thread to stop monitoring.
     :returns: None
     """
-    """Monitor ongoing scans and report if no progress for specified timeout."""
     last_activity_time = time.time()
 
     while not stop_event.is_set():
@@ -207,10 +210,94 @@ def monitor_progress(active_scans: Set[str], timeout: int, stop_event: threading
     print("[*] Progress monitoring stopped.")
 
 
+def run_scan_from_web(ip_range: str, ping_method: str = 'full', port_scan: str = None, aggressive: bool = False) -> int:
+    """Run a scan initiated from the web interface and save results to database."""
+    print(f"[*] Starting scan from web interface: {ip_range}")
+    db = ScanDatabase()
+
+    # Create scan record
+    scan_id = db.create_scan(ip_range, ping_method, port_scan, aggressive)
+
+    try:
+        # Discover hosts
+        hosts = discover_hosts(ip_range, ping_method)
+
+        # Save hosts to database
+        host_ids_map = {}  # Maps IP addresses to database host IDs
+        if hosts:
+            host_ids = db.save_hosts(scan_id, hosts)
+            for i, host in enumerate(hosts):
+                host_ids_map[host['address']] = host_ids[i]
+
+        # Run port scans if requested
+        if port_scan and hosts:
+            ips = [host['address'] for host in hosts]
+
+            # Configure scan parameters
+            scan_results = []
+            active_scans = set(ips)
+            stop_event = threading.Event()
+
+            # Start monitoring thread
+            monitor_thread = threading.Thread(
+                target=monitor_progress,
+                args=(active_scans, 60, stop_event)
+            )
+            monitor_thread.daemon = True
+            monitor_thread.start()
+
+            try:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=14) as executor:
+                    future_to_ip = {
+                        executor.submit(
+                            port_scan_ip,
+                            ip,
+                            aggressive,
+                            port_scan
+                        ): ip for ip in ips
+                    }
+
+                    for future in concurrent.futures.as_completed(future_to_ip):
+                        ip = future_to_ip[future]
+                        try:
+                            result = future.result()
+                            scan_results.append(result)
+                            active_scans.remove(ip)
+
+                            # Save port results to database
+                            if result.get('ports') and ip in host_ids_map:
+                                db.save_port_results(host_ids_map[ip], result['ports'])
+
+                            print(f"[+] Completed port scan for {ip}")
+                        except Exception as exc:
+                            active_scans.remove(ip)
+                            print(f"[!] Scan for {ip} generated an exception: {exc}")
+            finally:
+                stop_event.set()
+                monitor_thread.join(timeout=2.0)
+
+        # Mark scan as complete
+        db.mark_scan_complete(scan_id)
+        print(f"[*] Scan {scan_id} completed and saved to database")
+        return scan_id
+
+    except Exception as e:
+        print(f"[!] Error during scan: {str(e)}")
+        return scan_id
+
+
 def main() -> None:
     args = parse_args()
     os.makedirs('output', exist_ok=True)
 
+    # If --web is specified, start the web interface
+    if args.web:
+        from web_app import start_web_server
+        print(f"[*] Starting web interface on {args.web_host}:{args.web_port}")
+        start_web_server(args.web_host, args.web_port)
+        return
+
+    # Otherwise, run a CLI scan as before
     if ',' in args.ip_range:
         args.ip_range = args.ip_range.replace(', ', ' ')
 
@@ -221,6 +308,23 @@ def main() -> None:
         return
 
     display_hosts(hosts)
+
+    # Connect to database
+    db = ScanDatabase()
+
+    # Create scan record
+    scan_id = db.create_scan(
+        args.ip_range,
+        args.ping_method,
+        args.port_scan if args.port_scan else None,
+        args.aggressive_port_scan
+    )
+
+    # Save hosts to database
+    host_ids_map = {}  # Maps IP addresses to database host IDs
+    host_ids = db.save_hosts(scan_id, hosts)
+    for i, host in enumerate(hosts):
+        host_ids_map[host['address']] = host_ids[i]
 
     # if port scanning is enabled
     if args.port_scan:
@@ -263,6 +367,11 @@ def main() -> None:
                         completed_scans += 1
                         active_scans.remove(ip)
                         print(f"[+] Completed port scan for {ip} ({completed_scans}/{total_ips})")
+
+                        # Save port results to database
+                        if result.get('ports') and ip in host_ids_map:
+                            db.save_port_results(host_ids_map[ip], result['ports'])
+
                     except Exception as exc:
                         completed_scans += 1
                         active_scans.remove(ip)
@@ -273,6 +382,11 @@ def main() -> None:
 
         display_scan_results(scan_results)
         print("\n[*] All scans completed. Results saved in output directory.")
+
+    # Mark scan as complete
+    db.mark_scan_complete(scan_id)
+    print(f"[*] Scan results also saved to database with ID: {scan_id}")
+    print(f"[*] Start the web interface with 'python nmap_scanner.py --web' to view results")
 
 
 if __name__ == '__main__':

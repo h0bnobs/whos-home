@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Network Scanner - Dashboard{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1>Dashboard</h1>
+        <p class="lead">View and manage network scan results</p>
+    </div>
+    <div class="col-auto align-self-center">
+        <a href="/new_scan" class="btn btn-primary">New Scan</a>
+    </div>
+</div>
+
+{% if scans %}
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+        {% for scan in scans %}
+            <div class="col">
+                <div class="card h-100 scan-card">
+                    <div class="card-body">
+                        <h5 class="card-title">Scan #{{ scan.id }}</h5>
+                        <h6 class="card-subtitle mb-2 text-muted">{{ scan.timestamp }}</h6>
+                        <p class="card-text">
+                            <strong>IP Range:</strong> {{ scan.ip_range }}<br>
+                            <strong>Method:</strong> {{ scan.ping_method }}<br>
+                            {% if scan.scan_type %}
+                                <strong>Port Scan:</strong> {{ scan.scan_type }}
+                                {% if scan.aggressive %}
+                                    (Aggressive)
+                                {% endif %}
+                            {% endif %}
+                        </p>
+                    </div>
+                    <div class="card-footer bg-transparent">
+                        <a href="/scan/{{ scan.id }}" class="btn btn-sm btn-outline-primary">View Details</a>
+                        {% if not scan.completed %}
+                            <span class="badge bg-warning text-dark float-end">In Progress</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="alert alert-info">
+        No scans yet. <a href="/new_scan" class="alert-link">Start a new scan</a> to get started.
+    </div>
+{% endif %}
+{% endblock %}

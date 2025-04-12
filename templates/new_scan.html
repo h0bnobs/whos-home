@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}New Scan{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">New Network Scan</h1>
+
+<div class="card">
+    <div class="card-body">
+        <form action="/new_scan" method="post">
+            <div class="mb-3">
+                <label for="ip_range" class="form-label">IP Range</label>
+                <input type="text" class="form-control" id="ip_range" name="ip_range" required
+                       placeholder="192.168.1.0/24 or 10.0.0.1-10.0.0.50">
+                <div class="form-text">Enter an IP range in CIDR notation or IP range format</div>
+            </div>
+            
+            <div class="mb-3">
+                <label for="ping_method" class="form-label">Ping Method</label>
+                <select class="form-select" id="ping_method" name="ping_method">
+                    <option value="full" selected>Full (ICMP, TCP, ARP)</option>
+                    <option value="icmp">ICMP Only</option>
+                    <option value="arp">ARP Only</option>
+                </select>
+                <div class="form-text">Select the method to use for host discovery</div>
+            </div>
+            
+            <div class="mb-3">
+                <label for="port_scan" class="form-label">Port Scan</label>
+                <select class="form-select" id="port_scan" name="port_scan">
+                    <option value="" selected>No port scan</option>
+                    <option value="default">Default (Top 1000 ports)</option>
+                    <option value="all-ports">All Ports (Slower)</option>
+                </select>
+            </div>
+            
+            <div class="mb-3 form-check">
+                <input type="checkbox" class="form-check-input" id="aggressive_scan" name="aggressive_scan">
+                <label class="form-check-label" for="aggressive_scan">Aggressive Scan (OS detection, version detection, script scanning)</label>
+            </div>
+            
+            <button type="submit" class="btn btn-primary">Start Scan</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,146 @@
+<!-- templates/scan_details.html -->
+{% extends "base.html" %}
+
+{% block title %}Scan Details #{{ scan.id }}{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-4">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+        <li class="breadcrumb-item active">Scan #{{ scan.id }}</li>
+    </ol>
+</nav>
+
+<div class="row mb-4">
+    <div class="col">
+        <h1>Scan #{{ scan.id }}</h1>
+        <p class="text-muted">{{ scan.timestamp }}</p>
+    </div>
+    <div class="col-auto align-self-center">
+        <a href="/new_scan" class="btn btn-outline-primary">New Scan</a>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">Scan Information</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <p><strong>IP Range:</strong> {{ scan.ip_range }}</p>
+                <p><strong>Ping Method:</strong> {{ scan.ping_method }}</p>
+                {% if scan.scan_type %}
+                    <p><strong>Port Scan:</strong> {{ scan.scan_type }}</p>
+                {% endif %}
+            </div>
+            <div class="col-md-6">
+                <p><strong>Status:</strong>
+                    {% if scan.completed %}
+                        <span class="badge bg-success">Completed</span>
+                    {% else %}
+                        <span class="badge bg-warning text-dark">In Progress</span>
+                    {% endif %}
+                </p>
+                <p><strong>Hosts Found:</strong> {{ scan.host_count }}</p>
+                {% if scan.scan_type %}
+                    <p><strong>Open Ports Found:</strong> {{ scan.open_port_count }}</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if scan.hosts %}
+    <h2 class="mb-3">Discovered Hosts</h2>
+
+    {% for host in scan.hosts %}
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">{{ host.address }}</h5>
+                <span class="badge {% if host.status == 'up' %}bg-success{% else %}bg-danger{% endif %}">
+                    {{ host.status }}
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <p><strong>Hostname:</strong> {{ host.hostname }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>MAC Address:</strong> {{ host.mac }}</p>
+                    </div>
+                </div>
+
+                {% if host.ports %}
+                    <h6>Open Ports</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Port</th>
+                                    <th>Protocol</th>
+                                    <th>State</th>
+                                    <th>Service</th>
+                                    <th>Version</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for port in host.ports %}
+                                    {% if port.state == 'open' %}
+                                        <tr>
+                                            <td>{{ port.port }}</td>
+                                            <td>{{ port.protocol }}</td>
+                                            <td>
+                                                <span class="badge bg-success">{{ port.state }}</span>
+                                            </td>
+                                            <td>{{ port.service }}</td>
+                                            <td>{{ port.product }} {{ port.version }}</td>
+                                        </tr>
+                                    {% endif %}
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <h6 class="mt-4">All Ports</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Port</th>
+                                    <th>Protocol</th>
+                                    <th>State</th>
+                                    <th>Service</th>
+                                    <th>Version</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for port in host.ports %}
+                                    <tr>
+                                        <td>{{ port.port }}</td>
+                                        <td>{{ port.protocol }}</td>
+                                        <td>
+                                            <span class="badge {% if port.state == 'open' %}bg-success{% elif port.state == 'filtered' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+                                                {{ port.state }}
+                                            </span>
+                                        </td>
+                                        <td>{{ port.service }}</td>
+                                        <td>{{ port.product }} {{ port.version }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    {% if scan.scan_type %}
+                        <div class="alert alert-info">No port scan results available for this host.</div>
+                    {% endif %}
+                {% endif %}
+            </div>
+        </div>
+    {% endfor %}
+{% else %}
+    <div class="alert alert-warning">No hosts found in this scan.</div>
+{% endif %}
+{% endblock %}
